@@ -1,0 +1,67 @@
+name: Build and Release
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Build module
+        id: build
+        env:
+          HAIL_TOKEN: ${{ secrets.HAIL_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: bash .github/scripts/build_module.sh
+
+      - name: Commit rendered module.prop and update.json
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add module/module.prop module/update.json CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "No metadata changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: bump to ${{ steps.build.outputs.release_tag }}"
+          git push
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.build.outputs.release_tag }}
+          name: ${{ steps.build.outputs.release_title }}
+          body: ${{ steps.build.outputs.release_body }}
+          files: ${{ steps.build.outputs.zip_path }}
+          prerelease: false
+          generate_release_notes: false
+
+      - name: Prune releases older than 6 months
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cutoff=$(date -u -d '6 months ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "Pruning releases published before $cutoff"
+          gh release list --repo "${{ github.repository }}" --json tagName,publishedAt \
+            --jq ".[] | select(.publishedAt < \"$cutoff\") | .tagName" \
+            | while read -r tag; do
+                echo "Deleting release $tag"
+                gh release delete "$tag" --repo "${{ github.repository }}" --yes --cleanup-tag
+              done

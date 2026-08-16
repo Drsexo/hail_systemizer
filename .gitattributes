@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.sh text eol=lf
+*.xml text eol=lf
+*.json text eol=lf
+*.prop text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+
+*.jpg binary
+*.png binary
+*.apk binary
