@@ -5,7 +5,7 @@ set -euo pipefail
 HAIL_OWNER="aistra0528"
 HAIL_REPO="Hail"
 HAIL_WORKFLOW="android.yml"
-HAIL_BRANCH="master"
+HAIL_BRANCH="main"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MODULE_DIR="$REPO_ROOT/module"
