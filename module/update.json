@@ -1,6 +1,6 @@
 {
-  "version": "PLACEHOLDER_VERSION",
-  "versionCode": PLACEHOLDER_VERSION_CODE,
-  "zipUrl": "PLACEHOLDER_ZIP_URL",
-  "changelog": "PLACEHOLDER_CHANGELOG_URL"
+  "version": "v1.10.0-gaf2c313",
+  "versionCode": 1000010,
+  "zipUrl": "https://github.com/Drsexo/hail_systemizer/releases/download/v1.10.0-gaf2c313/hail_systemizer-v1.10.0-gaf2c313-20260816.zip",
+  "changelog": "https://raw.githubusercontent.com/Drsexo/hail_systemizer/main/CHANGELOG.md"
 }

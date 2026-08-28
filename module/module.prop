@@ -1,7 +1,7 @@
 id=hail_systemizer
 name=Hail Systemizer
-version=PLACEHOLDER_VERSION
-versionCode=PLACEHOLDER_VERSION_CODE
+version=v1.10.0-gaf2c313
+versionCode=1000010
 author=DrSexo
 description=Install Hail as a privileged system app and grant necessary privileged permissions automatically.
 updateJson=https://raw.githubusercontent.com/DrSexo/hail_systemizer/main/module/update.json
