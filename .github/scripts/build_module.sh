@@ -9,7 +9,6 @@ HAIL_BRANCH="main"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MODULE_DIR="$REPO_ROOT/module"
-APK_DEST="$MODULE_DIR/system/priv-app/Hail/Hail.apk"
 
 die() {
     local code="$1"; shift
@@ -91,24 +90,44 @@ ZIP_NAME="hail_systemizer-${VERSION}-${BUILD_DATE}.zip"
 ZIP_URL="https://github.com/${THIS_REPO}/releases/download/${VERSION}/${ZIP_NAME}"
 CHANGELOG_URL="https://raw.githubusercontent.com/${THIS_REPO}/main/CHANGELOG.md"
 
-# Install APK into module
-echo ":: Installing APK into module"
-mkdir -p "$(dirname "$APK_DEST")"
-cp "$REPO_ROOT/Hail.apk" "$APK_DEST"
+# Install APK and render templates in a temp build dir.
+BUILD_DIR=$(mktemp -d)
+trap 'rm -rf "$BUILD_DIR"' EXIT
 
-# Render module.prop
-echo ":: Rendering module.prop and update.json"
-sed -i \
+echo ":: Preparing build directory"
+cp -r "$MODULE_DIR/." "$BUILD_DIR/"
+rm -f "$BUILD_DIR/.gitkeep" "$BUILD_DIR/README.md"
+
+mkdir -p "$BUILD_DIR/system/priv-app/Hail"
+cp "$REPO_ROOT/Hail.apk" "$BUILD_DIR/system/priv-app/Hail/Hail.apk"
+
+echo ":: Rendering module.prop (build dir only)"
+sed \
     -e "s/PLACEHOLDER_VERSION_CODE/${VERSION_CODE}/g" \
     -e "s/PLACEHOLDER_VERSION/${VERSION}/g" \
-    "$MODULE_DIR/module.prop"
+    "$MODULE_DIR/module.prop" > "$BUILD_DIR/module.prop"
 
-sed -i \
+echo ":: Rendering update.json"
+sed \
     -e "s/PLACEHOLDER_VERSION_CODE/${VERSION_CODE}/g" \
     -e "s/PLACEHOLDER_VERSION/${VERSION}/g" \
     -e "s|PLACEHOLDER_ZIP_URL|${ZIP_URL}|g" \
     -e "s|PLACEHOLDER_CHANGELOG_URL|${CHANGELOG_URL}|g" \
-    "$MODULE_DIR/update.json"
+    "$MODULE_DIR/update.json" > "$BUILD_DIR/update.json.rendered"
+
+cp "$BUILD_DIR/update.json.rendered" "$MODULE_DIR/update.json"
+rm -f "$BUILD_DIR/update.json.rendered"
+
+JQ_ERR=$(jq empty "$MODULE_DIR/update.json" 2>&1 >/dev/null) || {
+    echo "::group::Rendered update.json content (DEBUG)"
+    cat "$MODULE_DIR/update.json"
+    echo "::endgroup::"
+    die 1 "Rendered update.json is not valid JSON: ${JQ_ERR}"
+}
+VC_TYPE=$(jq -r '.versionCode | type' "$MODULE_DIR/update.json")
+if [ "$VC_TYPE" != "number" ]; then
+    die 1 "Rendered update.json versionCode is ${VC_TYPE}, must be number"
+fi
 
 echo ":: Generating CHANGELOG.md"
 cat > "$REPO_ROOT/CHANGELOG.md" <<EOF
@@ -120,29 +139,11 @@ cat > "$REPO_ROOT/CHANGELOG.md" <<EOF
 - Workflow run: [#${RUN_NUMBER}](${RUN_HTML_URL})
 EOF
 
-# Validate update.json
-JQ_ERR=$(jq empty "$MODULE_DIR/update.json" 2>&1 >/dev/null) || {
-    echo "::group::Rendered update.json content (DEBUG)"
-    cat "$MODULE_DIR/update.json"
-    echo ""
-    echo "--- hexdump ---"
-    od -A x -t x1z -v "$MODULE_DIR/update.json" | head -20
-    echo "::endgroup::"
-    die 1 "Rendered update.json is not valid JSON: ${JQ_ERR}"
-}
-VC_TYPE=$(jq -r '.versionCode | type' "$MODULE_DIR/update.json")
-if [ "$VC_TYPE" != "number" ]; then
-    die 1 "Rendered update.json versionCode is ${VC_TYPE}, must be number"
-fi
-
-# Build the module zip
 echo ":: Building module zip"
 (
-    cd "$MODULE_DIR"
+    cd "$BUILD_DIR"
     rm -f "$REPO_ROOT/${ZIP_NAME}"
     find . \( -type d -o -type f \) \
-        ! -name '.gitkeep' \
-        ! -name 'README.md' \
         ! -name 'update.json' \
         -print0 \
         | xargs -0 zip -q "$REPO_ROOT/${ZIP_NAME}"
