@@ -76,6 +76,8 @@ else
     die 3 "APK filename does not match expected pattern: ${ART_NAME}"
 fi
 
+VERSION="${VERSION/-g/-}"
+
 RUN_NUM="${GITHUB_RUN_NUMBER:-0}"
 VERSION_CODE=$((RUN_NUM + 1000000))
 

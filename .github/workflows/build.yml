@@ -21,7 +21,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Check for new Hail commit
+        id: check
+        env:
+          HAIL_TOKEN: ${{ secrets.HAIL_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          HAIL_SHA=$(curl -fsSL \
+            -H "Authorization: Bearer ${HAIL_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/aistra0528/Hail/actions/workflows/android.yml/runs?branch=main&status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].head_sha')
+          SHORT_SHA="${HAIL_SHA:0:7}"
+          echo "Latest Hail commit: ${SHORT_SHA}"
+
+          LATEST_TAG=$(curl -fsSL \
+            -H "Authorization: Bearer ${HAIL_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" 2>/dev/null \
+            | jq -r '.tag_name // ""')
+          echo "Latest release tag: ${LATEST_TAG:-none}"
+
+          if echo "$LATEST_TAG" | grep -q "$SHORT_SHA"; then
+            echo "Hail commit ${SHORT_SHA} already released. Skipping build."
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build module
+        if: steps.check.outputs.should_build == 'true'
         id: build
         env:
           HAIL_TOKEN: ${{ secrets.HAIL_TOKEN }}
@@ -30,6 +60,7 @@ jobs:
         run: bash .github/scripts/build_module.sh
 
       - name: Commit rendered module.prop and update.json
+        if: steps.check.outputs.should_build == 'true'
         continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
@@ -43,6 +74,7 @@ jobs:
           git push
 
       - name: Upload release asset
+        if: steps.check.outputs.should_build == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.build.outputs.release_tag }}
