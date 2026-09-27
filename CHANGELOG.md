@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.11.0-30fb8cf - 2026-09-20 07:58 UTC
+## v1.11.0-26f3f07 - 2026-09-27 08:38 UTC
 
-- Hail APK: [30fb8cf](https://github.com/aistra0528/Hail/commit/30fb8cf9b3dd456cd5b6724e572493f6c25874bc)
-- Workflow run: [#512](https://github.com/aistra0528/Hail/actions/runs/35212681499)
+- Hail APK: [26f3f07](https://github.com/aistra0528/Hail/commit/26f3f07e8e6d049f3f5870cda2bb987acea59f1b)
+- Workflow run: [#513](https://github.com/aistra0528/Hail/actions/runs/36100330568)
