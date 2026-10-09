@@ -70,31 +70,29 @@ fi
 
 # Parse version from filename
 if [[ "$ART_NAME" =~ ^Hail-(v[0-9]+(\.[0-9]+)*(-[^.]+)?)\.apk$ ]]; then
-    VERSION="${BASH_REMATCH[1]}"
-    SEMVER=$(printf '%s' "$VERSION" | grep -oE 'v[0-9]+(\.[0-9]+)*' | tr -d 'v.')
+    HAIL_VERSION="${BASH_REMATCH[1]}"
+    HAIL_VERSION="${HAIL_VERSION/-g/-}"
 else
     die 3 "APK filename does not match expected pattern: ${ART_NAME}"
 fi
 
-VERSION="${VERSION/-g/-}"
+BUILD_DATE=$(date -u +"%Y%m%d")
+VERSION="v$(date -u +"%Y.%m.%d")"
+VERSION_CODE="$BUILD_DATE"
+DESCRIPTION="Hail ${HAIL_VERSION} - Install Hail as a privileged system app and grant necessary privileged permissions automatically."
 
-RUN_NUM="${GITHUB_RUN_NUMBER:-0}"
-VERSION_CODE=$((RUN_NUM + 1000000))
-
-echo ":: version=${VERSION} versionCode=${VERSION_CODE} (run=${RUN_NUM})"
+echo ":: hail=${HAIL_VERSION} version=${VERSION} versionCode=${VERSION_CODE}"
 
 # Build metadata
-NOW_UTC=$(date -u +"%Y-%m-%d %H:%M UTC")
-BUILD_DATE=$(date -u +"%Y%m%d")
-
 THIS_REPO="${GITHUB_REPOSITORY:-DrSexo/hail_systemizer}"
-ZIP_NAME="hail_systemizer-${VERSION}-${BUILD_DATE}.zip"
-ZIP_URL="https://github.com/${THIS_REPO}/releases/download/${VERSION}/${ZIP_NAME}"
+NOW_UTC=$(date -u +"%Y-%m-%d %H:%M UTC")
+ZIP_NAME="hail_systemizer-${HAIL_VERSION}-${BUILD_DATE}.zip"
+ZIP_URL="https://github.com/${THIS_REPO}/releases/download/${HAIL_VERSION}/${ZIP_NAME}"
 CHANGELOG_URL="https://raw.githubusercontent.com/${THIS_REPO}/main/CHANGELOG.md"
 
-# Install APK and render templates in a temp build dir.
 BUILD_DIR=$(mktemp -d)
 trap 'rm -rf "$BUILD_DIR"' EXIT
+# Install APK and render templates in a temp build dir.
 
 echo ":: Preparing build directory"
 cp -r "$MODULE_DIR/." "$BUILD_DIR/"
@@ -103,10 +101,11 @@ rm -f "$BUILD_DIR/.gitkeep" "$BUILD_DIR/README.md"
 mkdir -p "$BUILD_DIR/system/priv-app/Hail"
 cp "$REPO_ROOT/Hail.apk" "$BUILD_DIR/system/priv-app/Hail/Hail.apk"
 
-echo ":: Rendering module.prop (build dir only)"
+echo ":: Rendering module.prop"
 sed \
     -e "s/PLACEHOLDER_VERSION_CODE/${VERSION_CODE}/g" \
     -e "s/PLACEHOLDER_VERSION/${VERSION}/g" \
+    -e "s|PLACEHOLDER_DESCRIPTION|${DESCRIPTION}|g" \
     "$MODULE_DIR/module.prop" > "$BUILD_DIR/module.prop"
 
 echo ":: Rendering update.json"
@@ -115,10 +114,8 @@ sed \
     -e "s/PLACEHOLDER_VERSION/${VERSION}/g" \
     -e "s|PLACEHOLDER_ZIP_URL|${ZIP_URL}|g" \
     -e "s|PLACEHOLDER_CHANGELOG_URL|${CHANGELOG_URL}|g" \
-    "$MODULE_DIR/update.json" > "$BUILD_DIR/update.json.rendered"
-
-cp "$BUILD_DIR/update.json.rendered" "$MODULE_DIR/update.json"
-rm -f "$BUILD_DIR/update.json.rendered"
+    "$MODULE_DIR/update.json" > "$BUILD_DIR/update.json"
+cp "$BUILD_DIR/update.json" "$MODULE_DIR/update.json"
 
 JQ_ERR=$(jq empty "$MODULE_DIR/update.json" 2>&1 >/dev/null) || {
     echo "::group::Rendered update.json content (DEBUG)"
@@ -126,10 +123,6 @@ JQ_ERR=$(jq empty "$MODULE_DIR/update.json" 2>&1 >/dev/null) || {
     echo "::endgroup::"
     die 1 "Rendered update.json is not valid JSON: ${JQ_ERR}"
 }
-VC_TYPE=$(jq -r '.versionCode | type' "$MODULE_DIR/update.json")
-if [ "$VC_TYPE" != "number" ]; then
-    die 1 "Rendered update.json versionCode is ${VC_TYPE}, must be number"
-fi
 
 echo ":: Generating CHANGELOG.md"
 cat > "$REPO_ROOT/CHANGELOG.md" <<EOF
@@ -137,6 +130,7 @@ cat > "$REPO_ROOT/CHANGELOG.md" <<EOF
 
 ## ${VERSION} - ${NOW_UTC}
 
+- Hail version: ${HAIL_VERSION}
 - Hail APK: [${SHORT_SHA}](https://github.com/${HAIL_OWNER}/${HAIL_REPO}/commit/${RUN_SHA})
 - Workflow run: [#${RUN_NUMBER}](${RUN_HTML_URL})
 EOF
@@ -157,28 +151,28 @@ if [ ! -f "$ZIP_PATH" ]; then
 fi
 echo ":: Wrote ${ZIP_PATH}"
 
-# Release
-RELEASE_TITLE="${VERSION#v}"
+RELEASE_TITLE="${HAIL_VERSION#v}"
 RELEASE_BODY=$(cat <<EOF
 [${SHORT_SHA}](https://github.com/${HAIL_OWNER}/${HAIL_REPO}/commit/${RUN_SHA}) [#${RUN_NUMBER}](${RUN_HTML_URL})
 Built: ${NOW_UTC}
 EOF
 )
+# Release
 
-# Write step outputs
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
         echo "release_title=${RELEASE_TITLE}"
         echo "release_body<<EOF"
         echo "${RELEASE_BODY}"
         echo "EOF"
+# Write step outputs
         echo "zip_path=${ZIP_PATH}"
         echo "zip_name=${ZIP_NAME}"
-        echo "release_tag=${VERSION}"
+        echo "release_tag=${HAIL_VERSION}"
         echo "version=${VERSION}"
         echo "version_code=${VERSION_CODE}"
     } >> "$GITHUB_OUTPUT"
 fi
 
 echo "::release_title=${RELEASE_TITLE}"
-echo "::release_tag=${VERSION}"
+echo "::release_tag=${HAIL_VERSION}"
